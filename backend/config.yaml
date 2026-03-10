@@ -1,0 +1,7 @@
+auth:
+  jwt_secret: "change_this_to_a_long_random_secret"
+  jwt_exp_minutes: 720
+  users:
+    - username: "admin"
+      password: "123456"
+      enabled: true
