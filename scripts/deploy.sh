@@ -59,6 +59,10 @@ fi
 CURRENT_SHA="$(git rev-parse --short HEAD)"
 log "当前代码版本: ${BRANCH} (${CURRENT_SHA})"
 
+export DOCKER_BUILDKIT="${DOCKER_BUILDKIT:-1}"
+export COMPOSE_DOCKER_CLI_BUILD="${COMPOSE_DOCKER_CLI_BUILD:-1}"
+log "已启用 BuildKit 构建加速"
+
 log "开始构建并启动容器"
 "${DC[@]}" up -d --build --remove-orphans
 
