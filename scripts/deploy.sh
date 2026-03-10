@@ -15,7 +15,7 @@ fail() {
 }
 
 if ! command -v git >/dev/null 2>&1; then
-  log "未检测到 git，将跳过版本信息输出。"
+  fail "git 未安装，无法拉取代码。"
 fi
 if ! command -v docker >/dev/null 2>&1; then
   fail "docker 未安装，无法部署容器。"
@@ -29,13 +29,35 @@ else
   fail "未检测到 docker compose（docker compose 或 docker-compose）。"
 fi
 
-if command -v git >/dev/null 2>&1; then
-  CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-  CURRENT_SHA="$(git rev-parse --short HEAD 2>/dev/null || true)"
-  if [[ -n "$CURRENT_BRANCH" && -n "$CURRENT_SHA" ]]; then
-    log "当前代码版本: ${CURRENT_BRANCH} (${CURRENT_SHA})"
-  fi
+GIT_REMOTE="${GIT_REMOTE:-origin}"
+BRANCH="${1:-$(git rev-parse --abbrev-ref HEAD)}"
+if [[ -z "$BRANCH" || "$BRANCH" == "HEAD" ]]; then
+  fail "无法识别当前分支，请显式传入分支名：scripts/deploy.sh <branch>"
 fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  fail "检测到未提交改动。请先提交/暂存后再部署，避免 pull 冲突。"
+fi
+
+log "准备拉取代码: remote=${GIT_REMOTE}, branch=${BRANCH}"
+git fetch "$GIT_REMOTE" "$BRANCH"
+
+if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+  git checkout "$BRANCH"
+else
+  git checkout -b "$BRANCH" --track "${GIT_REMOTE}/${BRANCH}"
+fi
+
+LOCAL_SHA="$(git rev-parse "$BRANCH")"
+REMOTE_SHA="$(git rev-parse "${GIT_REMOTE}/${BRANCH}")"
+if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
+  git pull --ff-only "$GIT_REMOTE" "$BRANCH"
+else
+  log "代码已是最新，无需 pull"
+fi
+
+CURRENT_SHA="$(git rev-parse --short HEAD)"
+log "当前代码版本: ${BRANCH} (${CURRENT_SHA})"
 
 log "开始构建并启动容器"
 "${DC[@]}" up -d --build --remove-orphans

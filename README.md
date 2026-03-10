@@ -118,20 +118,24 @@ docker compose down
 用途：
 
 1. 检查环境（git / docker / compose）
-2. 输出当前代码版本（如果本机有 git）
+2. 拉取指定分支最新代码（默认当前分支）
 3. 执行 `docker compose up -d --build --remove-orphans`
 4. 输出容器状态并做基础健康检查
 
 使用方式：
 
 ```bash
-# 使用当前工作区代码直接部署
+# 部署当前分支
 ./scripts/deploy.sh
+
+# 部署指定分支
+./scripts/deploy.sh main
 ```
 
 注意：
 
-- 脚本不会执行 `git fetch/pull/checkout`，只部署你当前目录里的代码。
+- 脚本会执行 `git fetch + checkout + pull --ff-only`。
+- 脚本在检测到本地有未提交改动时会直接退出，避免 pull 冲突。
 - 脚本默认读取 `.env`（如果存在）中的端口配置。
 
 ## 认证配置（backend/config.yaml）
