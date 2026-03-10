@@ -35,7 +35,7 @@ docker compose version
 ```
 
 ## 4. 首次部署
-scp -r /Users/zhangdadi/Downloads/MobileLocalization-main.zip ecs-user@106.53.65.33:~/MobileLocalization/
+
 ### 4.1 获取代码
 
 ```bash
