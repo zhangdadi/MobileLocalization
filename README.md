@@ -37,6 +37,8 @@ MobileLocalization/
 - Python 3.10+
 - Node.js 18+
 - npm 9+
+- Docker 24+（容器部署时）
+- Docker Compose v2（容器部署时）
 
 ## 快速启动
 
@@ -61,6 +63,76 @@ npm run dev -- --host 127.0.0.1 --port 5173
 ```
 
 前端地址：`http://127.0.0.1:5173`
+
+## 容器部署（推荐线上）
+
+### 1) 准备端口配置（可选）
+
+```bash
+cp .env.example .env
+```
+
+默认端口如下：
+
+- 前端：`5173`
+- 后端：`8003`
+
+可在 `.env` 中修改：
+
+```dotenv
+FRONTEND_PORT=5173
+BACKEND_PORT=8003
+```
+
+### 2) 启动容器
+
+```bash
+docker compose up -d --build
+```
+
+访问地址：
+
+- 前端：`http://127.0.0.1:5173`
+- 后端健康检查：`http://127.0.0.1:8003/api/health`
+
+### 3) 常用容器命令
+
+```bash
+# 查看状态
+docker compose ps
+
+# 查看日志
+docker compose logs -f
+
+# 重启
+docker compose restart
+
+# 停止并移除容器
+docker compose down
+```
+
+## 一键部署脚本
+
+项目提供了脚本：`scripts/deploy.sh`
+
+用途：
+
+1. 检查环境（git / docker / compose）
+2. 输出当前代码版本（如果本机有 git）
+3. 执行 `docker compose up -d --build --remove-orphans`
+4. 输出容器状态并做基础健康检查
+
+使用方式：
+
+```bash
+# 使用当前工作区代码直接部署
+./scripts/deploy.sh
+```
+
+注意：
+
+- 脚本不会执行 `git fetch/pull/checkout`，只部署你当前目录里的代码。
+- 脚本默认读取 `.env`（如果存在）中的端口配置。
 
 ## 认证配置（backend/config.yaml）
 
