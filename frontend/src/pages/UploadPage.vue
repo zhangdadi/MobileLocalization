@@ -20,6 +20,14 @@ const files = ref([])
 const loadingFiles = ref(false)
 const uploading = ref(false)
 const toast = ref({ show: false, type: 'success', message: '' })
+const editDialog = ref({
+  show: false,
+  loading: false,
+  saving: false,
+  relativePath: '',
+  content: '',
+  originalContent: ''
+})
 
 const languageOptions = computed(() => ([
   { code: 'en', label: t('upload.languageEnglish') },
@@ -38,6 +46,14 @@ function getAuthHeaders() {
 }
 
 const pendingUploadNames = computed(() => uploadFiles.value.map((item) => item.name).join(', '))
+const hasEditChanges = computed(() => editDialog.value.content !== editDialog.value.originalContent)
+const editFileName = computed(() => {
+  const relativePath = editDialog.value.relativePath
+  if (!relativePath) {
+    return '--'
+  }
+  return relativePath.split('/').pop() || relativePath
+})
 
 watch([platform, language], async () => {
   await fetchFiles()
@@ -205,6 +221,108 @@ async function downloadFile(relativePath) {
   }
 }
 
+function closeEditDialog() {
+  if (editDialog.value.saving) {
+    return
+  }
+  editDialog.value.show = false
+}
+
+async function openEditDialog(relativePath) {
+  editDialog.value = {
+    show: true,
+    loading: true,
+    saving: false,
+    relativePath,
+    content: '',
+    originalContent: ''
+  }
+  try {
+    const query = new URLSearchParams({
+      platform: platform.value,
+      language: language.value,
+      relative_path: relativePath
+    })
+    const response = await fetch(`${apiBase}/api/file-content?${query.toString()}`, {
+      credentials: 'include',
+      headers: getAuthHeaders()
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || t('upload.toastReadFileFailed'))
+    }
+    const data = await response.json()
+    const content = typeof data.content === 'string' ? data.content : ''
+    editDialog.value.content = content
+    editDialog.value.originalContent = content
+  } catch (error) {
+    showToast(error.message || t('upload.toastReadFileFailed'), 'error')
+    editDialog.value.show = false
+  } finally {
+    editDialog.value.loading = false
+  }
+}
+
+async function saveEditedFile() {
+  if (editDialog.value.loading || editDialog.value.saving || !editDialog.value.relativePath) {
+    return
+  }
+  editDialog.value.saving = true
+  try {
+    const response = await fetch(`${apiBase}/api/file-content`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify({
+        platform: platform.value,
+        language: language.value,
+        relative_path: editDialog.value.relativePath,
+        content: editDialog.value.content
+      })
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}))
+      throw new Error(data.detail || t('upload.toastSaveFileFailed'))
+    }
+    editDialog.value.originalContent = editDialog.value.content
+    showToast(t('upload.toastSaveFileSuccess'))
+    await fetchFiles()
+  } catch (error) {
+    showToast(error.message || t('upload.toastSaveFileFailed'), 'error')
+  } finally {
+    editDialog.value.saving = false
+  }
+}
+
+async function copyEditContent() {
+  try {
+    const text = editDialog.value.content || ''
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      showToast(t('upload.toastCopySuccess'))
+      return
+    }
+
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    const copied = document.execCommand('copy')
+    document.body.removeChild(textarea)
+    if (!copied) {
+      throw new Error(t('upload.toastCopyFailed'))
+    }
+    showToast(t('upload.toastCopySuccess'))
+  } catch (error) {
+    showToast(error.message || t('upload.toastCopyFailed'), 'error')
+  }
+}
+
 onMounted(() => {
   fetchFiles()
 })
@@ -284,14 +402,62 @@ onMounted(() => {
           </div>
           <div class="file-meta">
             <div class="time">{{ formatTime(item.updated_at) }}</div>
-            <button class="download-btn" @click="downloadFile(item.relative_path)">
-              <i class="fa-solid fa-download"></i>
-              {{ t('upload.download') }}
-            </button>
+            <div class="file-actions">
+              <button class="edit-btn" @click="openEditDialog(item.relative_path)">
+                <i class="fa-solid fa-pen-to-square"></i>
+                {{ t('upload.edit') }}
+              </button>
+              <button class="download-btn" @click="downloadFile(item.relative_path)">
+                <i class="fa-solid fa-download"></i>
+                {{ t('upload.download') }}
+              </button>
+            </div>
           </div>
         </li>
       </ul>
     </section>
+
+    <div v-if="editDialog.show" class="modal-mask" @click.self="closeEditDialog">
+      <section class="edit-modal">
+        <header class="edit-head">
+          <h3>{{ t('upload.editDialogTitle', { name: editFileName }) }}</h3>
+          <button class="close-btn" :disabled="editDialog.saving" @click="closeEditDialog">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </header>
+
+        <div v-if="editDialog.loading" class="modal-loading">
+          {{ t('upload.loadingFileContent') }}
+        </div>
+        <textarea
+          v-else
+          v-model="editDialog.content"
+          class="edit-textarea"
+          spellcheck="false"
+          :placeholder="t('upload.editPlaceholder')"
+        ></textarea>
+
+        <footer class="edit-foot">
+          <button class="copy-btn" :disabled="editDialog.loading" @click="copyEditContent">
+            <i class="fa-solid fa-copy"></i>
+            {{ t('upload.copy') }}
+          </button>
+          <div class="foot-right">
+            <button class="ghost-btn" :disabled="editDialog.saving" @click="closeEditDialog">
+              {{ t('upload.cancelEdit') }}
+            </button>
+            <button
+              class="save-btn"
+              :disabled="editDialog.loading || editDialog.saving || !hasEditChanges"
+              @click="saveEditedFile"
+            >
+              <i class="fa-solid fa-floppy-disk"></i>
+              {{ editDialog.saving ? t('upload.savingFileContent') : t('upload.saveEdit') }}
+            </button>
+          </div>
+        </footer>
+      </section>
+    </div>
 
     <transition name="toast-fade">
       <div v-if="toast.show" class="toast" :class="toast.type">
@@ -502,6 +668,13 @@ onMounted(() => {
   gap: 10px;
 }
 
+.file-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-btn,
 .download-btn {
   border: 0;
   border-radius: 8px;
@@ -513,6 +686,137 @@ onMounted(() => {
   color: #0f766e;
   background: rgba(15, 118, 110, 0.14);
   cursor: pointer;
+}
+
+.edit-btn {
+  color: #0f4f7a;
+  background: rgba(10, 132, 255, 0.15);
+}
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(13, 25, 31, 0.46);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.edit-modal {
+  width: min(860px, 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(15, 118, 110, 0.26);
+  background: linear-gradient(145deg, #f5fbf9, #eef6f5);
+  box-shadow: 0 16px 32px rgba(17, 31, 37, 0.28);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.edit-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #28434d;
+}
+
+.close-btn {
+  border: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(65, 83, 92, 0.12);
+  color: #38525c;
+  cursor: pointer;
+}
+
+.close-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.modal-loading {
+  border-radius: 10px;
+  padding: 16px 12px;
+  text-align: center;
+  color: #526973;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.edit-textarea {
+  width: 100%;
+  min-height: 340px;
+  border: 1px solid rgba(15, 118, 110, 0.24);
+  border-radius: 10px;
+  padding: 12px;
+  resize: vertical;
+  font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #263d47;
+  background: #ffffff;
+}
+
+.edit-textarea:focus {
+  outline: 2px solid rgba(15, 118, 110, 0.24);
+}
+
+.edit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.foot-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.copy-btn,
+.ghost-btn,
+.save-btn {
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.copy-btn {
+  color: #3d4f57;
+  background: rgba(65, 83, 92, 0.13);
+}
+
+.ghost-btn {
+  color: #425760;
+  background: rgba(65, 83, 92, 0.1);
+}
+
+.save-btn {
+  color: #effcf6;
+  background: linear-gradient(120deg, #0f766e, #0a5f59);
+}
+
+.copy-btn:disabled,
+.ghost-btn:disabled,
+.save-btn:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 
 .empty-state {
@@ -566,6 +870,28 @@ onMounted(() => {
   .upload-card,
   .list-card {
     padding: 12px;
+  }
+
+  .edit-modal {
+    padding: 12px;
+  }
+
+  .edit-textarea {
+    min-height: 260px;
+  }
+
+  .file-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .edit-foot {
+    align-items: stretch;
+  }
+
+  .foot-right {
+    width: 100%;
+    justify-content: flex-end;
   }
 
   .toast {
