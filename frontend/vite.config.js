@@ -1,3 +1,10 @@
+/**
+ * File: vite.config.js
+ * Description: Vite development server and API proxy configuration.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 

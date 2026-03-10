@@ -1,4 +1,11 @@
 <script setup>
+/**
+ * File: EditorPage.vue
+ * Description: Trilingual key-value editor with auto-save and cross-platform sync.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from '../i18n'
 

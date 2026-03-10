@@ -1,3 +1,10 @@
+/**
+ * File: router.js
+ * Description: Route definitions and authentication guards.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { createRouter, createWebHistory } from 'vue-router'
 import UploadPage from './pages/UploadPage.vue'
 import EditorPage from './pages/EditorPage.vue'

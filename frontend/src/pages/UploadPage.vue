@@ -1,4 +1,11 @@
 <script setup>
+/**
+ * File: UploadPage.vue
+ * Description: Upload, list, and download translation files by platform/language.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from '../i18n'
 

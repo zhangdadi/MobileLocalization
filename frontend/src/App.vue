@@ -1,4 +1,11 @@
 <script setup>
+/**
+ * File: App.vue
+ * Description: Global shell layout, navigation, locale switch, and logout logic.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { computed } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 import { useI18n } from './i18n'

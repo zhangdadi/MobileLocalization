@@ -1,3 +1,10 @@
+/**
+ * File: i18n.js
+ * Description: Lightweight localization messages and translation helper.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { ref } from 'vue'
 
 const LOCALE_STORAGE_KEY = 'ui_locale'

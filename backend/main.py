@@ -1,3 +1,10 @@
+"""
+File: main.py
+Description: FastAPI backend for localization upload, editing, and sync workflows.
+Author: zhangdadi
+Created: 2026-03-10
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone

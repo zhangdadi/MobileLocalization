@@ -1,4 +1,11 @@
 <script setup>
+/**
+ * File: LoginPage.vue
+ * Description: Login page with credential submission and session validation.
+ * Author: zhangdadi
+ * Created: 2026-03-10
+ */
+
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from '../i18n'
