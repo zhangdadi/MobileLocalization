@@ -217,4 +217,8 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 .vscode
-backend/storage/ios/en.lproj
+
+# Uploaded localization files (keep only folder placeholders)
+backend/storage/**
+!backend/storage/**/
+!backend/storage/**/.gitkeep
