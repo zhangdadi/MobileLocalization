@@ -48,12 +48,17 @@ else
   git checkout -b "$BRANCH" --track "${GIT_REMOTE}/${BRANCH}"
 fi
 
-LOCAL_SHA="$(git rev-parse "$BRANCH")"
-REMOTE_SHA="$(git rev-parse "${GIT_REMOTE}/${BRANCH}")"
-if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
+COUNTS="$(git rev-list --left-right --count "${BRANCH}...${GIT_REMOTE}/${BRANCH}")"
+LOCAL_AHEAD="$(awk '{print $1}' <<< "$COUNTS")"
+LOCAL_BEHIND="$(awk '{print $2}' <<< "$COUNTS")"
+
+if [[ "$LOCAL_BEHIND" -eq 0 ]]; then
+  log "本地分支已包含远端提交，无需 pull (ahead=${LOCAL_AHEAD}, behind=${LOCAL_BEHIND})"
+elif [[ "$LOCAL_AHEAD" -eq 0 ]]; then
+  log "本地分支落后远端，执行 fast-forward pull (ahead=${LOCAL_AHEAD}, behind=${LOCAL_BEHIND})"
   git pull --ff-only "$GIT_REMOTE" "$BRANCH"
 else
-  log "代码已是最新，无需 pull"
+  fail "本地与远端分支已分叉 (ahead=${LOCAL_AHEAD}, behind=${LOCAL_BEHIND})，请先手动 rebase/merge 后再部署。"
 fi
 
 CURRENT_SHA="$(git rev-parse --short HEAD)"
