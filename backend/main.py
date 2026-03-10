@@ -73,6 +73,13 @@ class SavePayload(BaseModel):
     content: str
 
 
+class AppendPayload(BaseModel):
+    platform: PlatformType
+    language: LanguageCode
+    relative_path: str
+    content: str
+
+
 class EditorRow(BaseModel):
     key: str = Field(default="")
     en: str = Field(default="")
@@ -475,13 +482,31 @@ def parse_ios_strings(content: str) -> dict[str, str]:
 
 
 def parse_android_xml(content: str) -> dict[str, str]:
+    text = content.strip()
+    if not text:
+        return {}
+
+    root: ET.Element
     try:
-        root = ET.fromstring(content)
+        root = ET.fromstring(text)
     except ET.ParseError as exc:
-        raise ValueError(f"XML parse failed: {exc}") from exc
+        # Compatibility: allow snippet files that only contain one or more
+        # <string name="...">...</string> lines without <resources> wrapper.
+        wrapped_source = re.sub(r'^\s*<\?xml[^>]*\?>\s*', '', text, flags=re.IGNORECASE)
+        wrapped = f"<resources>\n{wrapped_source}\n</resources>"
+        try:
+            root = ET.fromstring(wrapped)
+        except ET.ParseError as wrapped_exc:
+            raise ValueError(f"XML parse failed: {wrapped_exc}") from exc
 
     data: dict[str, str] = {}
-    for node in root.findall("string"):
+    nodes: list[ET.Element]
+    if root.tag == "string":
+        nodes = [root]
+    else:
+        nodes = list(root.findall("string"))
+
+    for node in nodes:
         key = (node.attrib.get("name") or "").strip()
         if not key:
             continue
@@ -494,6 +519,45 @@ def parse_translation_content(platform: PlatformType, content: str) -> dict[str,
     if platform == "ios":
         return parse_ios_strings(content)
     return parse_android_xml(content)
+
+
+def parse_append_translation_content(platform: PlatformType, content: str) -> dict[str, str]:
+    text = content.strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+
+    if platform == "ios":
+        parsed = parse_ios_strings(text)
+        if not parsed:
+            raise HTTPException(
+                status_code=400,
+                detail='iOS content format error. Example: "or_continue_with" = "Or continue with";',
+            )
+        return parsed
+
+    parsed: dict[str, str] = {}
+    parse_error: Exception | None = None
+
+    try:
+        parsed = parse_android_xml(text)
+    except ValueError as exc:
+        parse_error = exc
+
+    if not parsed:
+        wrapped_source = re.sub(r'^\s*<\?xml[^>]*\?>\s*', '', text, flags=re.IGNORECASE)
+        wrapped = f"<resources>\n{wrapped_source}\n</resources>"
+        try:
+            parsed = parse_android_xml(wrapped)
+        except ValueError as exc:
+            parse_error = exc
+
+    if not parsed:
+        raise HTTPException(
+            status_code=400,
+            detail='Android content format error. Example: <string name="close">Close</string>',
+        ) from parse_error
+
+    return parsed
 
 
 def serialize_ios_rows(rows: list[dict[str, str]], language: LanguageCode) -> str:
@@ -535,6 +599,64 @@ def serialize_translation_rows(
     if platform == "ios":
         return serialize_ios_rows(rows, language)
     return serialize_android_rows(rows, language)
+
+
+def append_entries_to_existing_file(
+    platform: PlatformType,
+    target_file: Path,
+    entries: dict[str, str],
+) -> int:
+    if not entries:
+        return 0
+
+    if platform == "ios":
+        lines = [
+            f'"{escape_ios_value(key)}" = "{escape_ios_value(value)}";'
+            for key, value in entries.items()
+        ]
+        original = read_text_safe(target_file)
+        base = original.rstrip("\n")
+        append_block = "\n".join(lines)
+        content = f"{base}\n{append_block}\n" if base else f"{append_block}\n"
+        target_file.write_text(content, encoding="utf-8")
+        return len(lines)
+
+    original = read_text_safe(target_file)
+
+    plain_lines = []
+    indented_lines = []
+    for key, value in entries.items():
+        escaped_key = html.escape(key, quote=True)
+        escaped_value = html.escape(value, quote=False)
+        plain_lines.append(f'<string name="{escaped_key}">{escaped_value}</string>')
+        indented_lines.append(f'    <string name="{escaped_key}">{escaped_value}</string>')
+
+    # For empty android files, keep snippet style without xml/resources wrapper.
+    if not original.strip():
+        target_file.write_text("\n".join(plain_lines) + "\n", encoding="utf-8")
+        return len(plain_lines)
+
+    closing_tag = "</resources>"
+    close_index = original.rfind(closing_tag)
+    if close_index < 0:
+        # Compatibility: snippet-style android file without <resources>.
+        try:
+            parse_android_xml(original)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Android XML missing {closing_tag}") from exc
+
+        append_block = "\n".join(plain_lines)
+        base = original.rstrip("\n")
+        content = f"{base}\n{append_block}\n" if base else f"{append_block}\n"
+        target_file.write_text(content, encoding="utf-8")
+        return len(plain_lines)
+
+    append_block = "\n".join(indented_lines)
+    head = original[:close_index].rstrip()
+    tail = original[close_index:]
+    content = f"{head}\n{append_block}\n{tail}"
+    target_file.write_text(content, encoding="utf-8")
+    return len(indented_lines)
 
 
 def get_opposite_platform(platform: PlatformType) -> PlatformType:
@@ -776,10 +898,13 @@ def list_files(
     language: LanguageCode = Query(..., description="Language code"),
 ) -> dict[str, list[dict[str, str | int]]]:
     root = get_language_root(platform, language)
+    expected_extension = PLATFORM_EXTENSION[platform]
     files: list[dict[str, str | int]] = []
 
     for item in root.rglob("*"):
         if not item.is_file():
+            continue
+        if item.suffix.lower() != expected_extension:
             continue
         stat = item.stat()
         files.append(
@@ -882,6 +1007,75 @@ def save_file_content(payload: SavePayload) -> dict[str, str]:
     return {
         "message": "Saved successfully",
         "relative_path": target_file.relative_to(root).as_posix(),
+    }
+
+
+@app.post("/api/file-content/append")
+def append_file_content(payload: AppendPayload) -> dict[str, str | int | list[str] | dict[str, str | int | list[str]]]:
+    relative_path = sanitize_segment(payload.relative_path)
+    if not relative_path:
+        raise HTTPException(status_code=400, detail="Missing append target file")
+
+    expected_extension = PLATFORM_EXTENSION[payload.platform]
+    if not relative_path.lower().endswith(expected_extension):
+        raise HTTPException(status_code=400, detail="Target file type does not match platform")
+
+    resolved_path = resolve_language_relative_path(payload.platform, payload.language, relative_path)
+    if not resolved_path:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if payload.language == "en":
+        backup_current_english_file(payload.platform)
+
+    appended_values = parse_append_translation_content(payload.platform, payload.content)
+
+    root = get_language_root(payload.platform, payload.language)
+    source_file = safe_join(root, resolved_path)
+    if not source_file.exists() or not source_file.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Pure append: no key/value comparison, no replacement.
+    appended_count = append_entries_to_existing_file(payload.platform, source_file, appended_values)
+    saved_languages: list[str] = [payload.language]
+    skipped_languages: list[str] = []
+    same_platform_synced: list[str] = []
+
+    # Sync by direct append to other uploaded languages on the same platform.
+    for language in LANGUAGES:
+        if language == payload.language:
+            continue
+
+        resolved_other = resolve_language_relative_path(payload.platform, language, resolved_path)
+        if not resolved_other:
+            skipped_languages.append(language)
+            continue
+
+        other_root = get_language_root(payload.platform, language)
+        other_file = safe_join(other_root, resolved_other)
+        if not other_file.exists() or not other_file.is_file():
+            skipped_languages.append(language)
+            continue
+
+        append_entries_to_existing_file(payload.platform, other_file, appended_values)
+        same_platform_synced.append(language)
+
+    merged_saved_languages = list(dict.fromkeys(saved_languages + same_platform_synced))
+    merged_skipped_languages = list(dict.fromkeys(skipped_languages))
+    no_cross_platform_sync = {
+        "target_platform": get_opposite_platform(payload.platform),
+        "target_relative_path": "",
+        "synced_rows": 0,
+        "saved_languages": [],
+    }
+
+    return {
+        "message": "Appended successfully",
+        "relative_path": resolved_path,
+        "added_keys_count": appended_count,
+        "updated_keys_count": 0,
+        "saved_languages": merged_saved_languages,
+        "skipped_languages": merged_skipped_languages,
+        "cross_platform_sync": no_cross_platform_sync,
     }
 
 

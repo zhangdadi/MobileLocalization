@@ -22,6 +22,7 @@ const uploading = ref(false)
 const toast = ref({ show: false, type: 'success', message: '' })
 const editDialog = ref({
   show: false,
+  mode: 'edit',
   loading: false,
   saving: false,
   relativePath: '',
@@ -47,12 +48,37 @@ function getAuthHeaders() {
 
 const pendingUploadNames = computed(() => uploadFiles.value.map((item) => item.name).join(', '))
 const hasEditChanges = computed(() => editDialog.value.content !== editDialog.value.originalContent)
+const isAppendMode = computed(() => editDialog.value.mode === 'append')
+const canSaveDialog = computed(() => {
+  if (isAppendMode.value) {
+    return Boolean(editDialog.value.content.trim())
+  }
+  return hasEditChanges.value
+})
 const editFileName = computed(() => {
   const relativePath = editDialog.value.relativePath
   if (!relativePath) {
     return '--'
   }
   return relativePath.split('/').pop() || relativePath
+})
+const dialogTitle = computed(() => {
+  if (isAppendMode.value) {
+    return t('upload.appendDialogTitle', { name: editFileName.value })
+  }
+  return t('upload.editDialogTitle', { name: editFileName.value })
+})
+const dialogPlaceholder = computed(() => {
+  if (isAppendMode.value) {
+    return t('upload.appendPlaceholder')
+  }
+  return t('upload.editPlaceholder')
+})
+const appendExample = computed(() => {
+  if (platform.value === 'ios') {
+    return t('upload.appendExampleIos')
+  }
+  return t('upload.appendExampleAndroid')
 })
 
 watch([platform, language], async () => {
@@ -231,6 +257,7 @@ function closeEditDialog() {
 async function openEditDialog(relativePath) {
   editDialog.value = {
     show: true,
+    mode: 'edit',
     loading: true,
     saving: false,
     relativePath,
@@ -263,35 +290,73 @@ async function openEditDialog(relativePath) {
   }
 }
 
+function openAppendDialog(relativePath) {
+  editDialog.value = {
+    show: true,
+    mode: 'append',
+    loading: false,
+    saving: false,
+    relativePath,
+    content: '',
+    originalContent: ''
+  }
+}
+
 async function saveEditedFile() {
   if (editDialog.value.loading || editDialog.value.saving || !editDialog.value.relativePath) {
     return
   }
   editDialog.value.saving = true
   try {
-    const response = await fetch(`${apiBase}/api/file-content`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders()
-      },
-      body: JSON.stringify({
-        platform: platform.value,
-        language: language.value,
-        relative_path: editDialog.value.relativePath,
-        content: editDialog.value.content
+    if (isAppendMode.value) {
+      const response = await fetch(`${apiBase}/api/file-content/append`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          platform: platform.value,
+          language: language.value,
+          relative_path: editDialog.value.relativePath,
+          content: editDialog.value.content
+        })
       })
-    })
-    if (!response.ok) {
       const data = await response.json().catch(() => ({}))
-      throw new Error(data.detail || t('upload.toastSaveFileFailed'))
+      if (!response.ok) {
+        throw new Error(data.detail || t('upload.toastAppendFailed'))
+      }
+      const addedCount = Number(data.added_keys_count || 0)
+      const updatedCount = Number(data.updated_keys_count || 0)
+      showToast(t('upload.toastAppendSuccess', { added: addedCount, updated: updatedCount }))
+      editDialog.value.show = false
+    } else {
+      const response = await fetch(`${apiBase}/api/file-content`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders()
+        },
+        body: JSON.stringify({
+          platform: platform.value,
+          language: language.value,
+          relative_path: editDialog.value.relativePath,
+          content: editDialog.value.content
+        })
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(data.detail || t('upload.toastSaveFileFailed'))
+      }
+      editDialog.value.originalContent = editDialog.value.content
+      showToast(t('upload.toastSaveFileSuccess'))
     }
-    editDialog.value.originalContent = editDialog.value.content
-    showToast(t('upload.toastSaveFileSuccess'))
     await fetchFiles()
   } catch (error) {
-    showToast(error.message || t('upload.toastSaveFileFailed'), 'error')
+    const fallback = isAppendMode.value ? t('upload.toastAppendFailed') : t('upload.toastSaveFileFailed')
+    showToast(error.message || fallback, 'error')
   } finally {
     editDialog.value.saving = false
   }
@@ -403,6 +468,10 @@ onMounted(() => {
           <div class="file-meta">
             <div class="time">{{ formatTime(item.updated_at) }}</div>
             <div class="file-actions">
+              <button class="append-btn" @click="openAppendDialog(item.relative_path)">
+                <i class="fa-solid fa-plus"></i>
+                {{ t('upload.append') }}
+              </button>
               <button class="edit-btn" @click="openEditDialog(item.relative_path)">
                 <i class="fa-solid fa-pen-to-square"></i>
                 {{ t('upload.edit') }}
@@ -420,7 +489,7 @@ onMounted(() => {
     <div v-if="editDialog.show" class="modal-mask" @click.self="closeEditDialog">
       <section class="edit-modal">
         <header class="edit-head">
-          <h3>{{ t('upload.editDialogTitle', { name: editFileName }) }}</h3>
+          <h3>{{ dialogTitle }}</h3>
           <button class="close-btn" :disabled="editDialog.saving" @click="closeEditDialog">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -434,8 +503,12 @@ onMounted(() => {
           v-model="editDialog.content"
           class="edit-textarea"
           spellcheck="false"
-          :placeholder="t('upload.editPlaceholder')"
+          :placeholder="dialogPlaceholder"
         ></textarea>
+        <div v-if="!editDialog.loading && isAppendMode" class="append-tip">
+          <p>{{ t('upload.appendTip') }}</p>
+          <pre class="append-sample">{{ appendExample }}</pre>
+        </div>
 
         <footer class="edit-foot">
           <button class="copy-btn" :disabled="editDialog.loading" @click="copyEditContent">
@@ -448,11 +521,15 @@ onMounted(() => {
             </button>
             <button
               class="save-btn"
-              :disabled="editDialog.loading || editDialog.saving || !hasEditChanges"
+              :disabled="editDialog.loading || editDialog.saving || !canSaveDialog"
               @click="saveEditedFile"
             >
               <i class="fa-solid fa-floppy-disk"></i>
-              {{ editDialog.saving ? t('upload.savingFileContent') : t('upload.saveEdit') }}
+              {{
+                editDialog.saving
+                  ? (isAppendMode ? t('upload.appendingContent') : t('upload.savingFileContent'))
+                  : (isAppendMode ? t('upload.appendSave') : t('upload.saveEdit'))
+              }}
             </button>
           </div>
         </footer>
@@ -674,6 +751,7 @@ onMounted(() => {
   gap: 8px;
 }
 
+.append-btn,
 .edit-btn,
 .download-btn {
   border: 0;
@@ -686,6 +764,11 @@ onMounted(() => {
   color: #0f766e;
   background: rgba(15, 118, 110, 0.14);
   cursor: pointer;
+}
+
+.append-btn {
+  color: #1f6d19;
+  background: rgba(34, 197, 94, 0.18);
 }
 
 .edit-btn {
@@ -768,6 +851,30 @@ onMounted(() => {
 
 .edit-textarea:focus {
   outline: 2px solid rgba(15, 118, 110, 0.24);
+}
+
+.append-tip {
+  margin-top: 2px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.append-tip p {
+  margin: 0 0 8px;
+  color: #44616b;
+  font-size: 0.86rem;
+}
+
+.append-sample {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.84);
+  color: #28414a;
+  font-size: 0.82rem;
 }
 
 .edit-foot {
