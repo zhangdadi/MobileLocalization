@@ -18,6 +18,7 @@ const rows = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const searchKeyword = ref('')
+const searchEnglish = ref('')
 const uploadedLanguages = ref({
   en: false,
   ar: false,
@@ -53,12 +54,17 @@ const hasAnyUploaded = computed(() => {
 })
 
 const filteredRows = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
+  const keyKeyword = searchKeyword.value.trim().toLowerCase()
+  const englishKeyword = searchEnglish.value.trim().toLowerCase()
   const indexed = rows.value.map((item, sourceIndex) => ({ item, sourceIndex }))
-  if (!keyword) {
+  if (!keyKeyword && !englishKeyword) {
     return indexed
   }
-  return indexed.filter(({ item }) => item.key.toLowerCase().includes(keyword))
+  return indexed.filter(({ item }) => {
+    const keyMatched = !keyKeyword || (item.key || '').toLowerCase().includes(keyKeyword)
+    const englishMatched = !englishKeyword || (item.en || '').toLowerCase().includes(englishKeyword)
+    return keyMatched && englishMatched
+  })
 })
 
 const pendingSave = ref(false)
@@ -347,9 +353,15 @@ onMounted(() => {
     </div>
     <div v-else class="editor-wrap">
       <div class="toolbar">
-        <div class="search-box">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input v-model="searchKeyword" :placeholder="t('editor.searchByKey')" />
+        <div class="search-group">
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input v-model="searchKeyword" :placeholder="t('editor.searchByKey')" />
+          </div>
+          <div class="search-box">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input v-model="searchEnglish" :placeholder="t('editor.searchByEnglish')" />
+          </div>
         </div>
         <div class="toolbar-actions">
           <button class="text-btn" :disabled="loading" @click="fetchEditorTable">
@@ -543,6 +555,12 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-group {
+  display: inline-flex;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
