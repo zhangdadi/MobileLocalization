@@ -35,12 +35,7 @@ if [[ -z "$BRANCH" || "$BRANCH" == "HEAD" ]]; then
   fail "无法识别当前分支，请显式传入分支名：scripts/deploy.sh <branch>"
 fi
 
-if [[ -n "$(git status --porcelain)" ]]; then
-  fail "检测到未提交改动。请先提交/暂存后再部署，避免 pull 冲突。"
-fi
-
-log "准备拉取代码: remote=${GIT_REMOTE}, branch=${BRANCH}"
-git fetch "$GIT_REMOTE" "$BRANCH"
+log "准备拉取代码并部署: remote=${GIT_REMOTE}, branch=${BRANCH}"
 
 if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
   git checkout "$BRANCH"
@@ -48,18 +43,7 @@ else
   git checkout -b "$BRANCH" --track "${GIT_REMOTE}/${BRANCH}"
 fi
 
-COUNTS="$(git rev-list --left-right --count "${BRANCH}...${GIT_REMOTE}/${BRANCH}")"
-LOCAL_AHEAD="$(awk '{print $1}' <<< "$COUNTS")"
-LOCAL_BEHIND="$(awk '{print $2}' <<< "$COUNTS")"
-
-if [[ "$LOCAL_BEHIND" -eq 0 ]]; then
-  log "本地分支已包含远端提交，无需 pull (ahead=${LOCAL_AHEAD}, behind=${LOCAL_BEHIND})"
-elif [[ "$LOCAL_AHEAD" -eq 0 ]]; then
-  log "本地分支落后远端，执行 fast-forward pull (ahead=${LOCAL_AHEAD}, behind=${LOCAL_BEHIND})"
-  git pull --ff-only "$GIT_REMOTE" "$BRANCH"
-else
-  fail "本地与远端分支已分叉 (ahead=${LOCAL_AHEAD}, behind=${LOCAL_BEHIND})，请先手动 rebase/merge 后再部署。"
-fi
+git pull "$GIT_REMOTE" "$BRANCH"
 
 CURRENT_SHA="$(git rev-parse --short HEAD)"
 log "当前代码版本: ${BRANCH} (${CURRENT_SHA})"
