@@ -33,7 +33,8 @@ const editDialog = ref({
 const languageOptions = computed(() => ([
   { code: 'en', label: t('upload.languageEnglish') },
   { code: 'ar', label: t('upload.languageArabic') },
-  { code: 'tr', label: t('upload.languageTurkish') }
+  { code: 'tr', label: t('upload.languageTurkish') },
+  { code: 'pt-BR', label: t('upload.languagePortugueseBrazil') }
 ]))
 
 function getAuthHeaders() {

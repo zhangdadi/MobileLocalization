@@ -1,7 +1,7 @@
 <script setup>
 /**
  * File: EditorPage.vue
- * Description: Trilingual key-value editor with auto-save and cross-platform sync.
+ * Description: Multilingual key-value editor with auto-save and cross-platform sync.
  * Author: zhangdadi
  * Created: 2026-03-10
  */
@@ -22,7 +22,8 @@ const searchEnglish = ref('')
 const uploadedLanguages = ref({
   en: false,
   ar: false,
-  tr: false
+  tr: false,
+  'pt-BR': false
 })
 const toast = ref({ show: false, type: 'success', message: '' })
 
@@ -32,7 +33,8 @@ const saveHint = computed(() => t(saveHintState.value.key, saveHintState.value.p
 const languageColumns = computed(() => ([
   { code: 'en', label: t('editor.columnEnglish') },
   { code: 'ar', label: t('editor.columnArabic') },
-  { code: 'tr', label: t('editor.columnTurkish') }
+  { code: 'tr', label: t('editor.columnTurkish') },
+  { code: 'pt-BR', label: t('editor.columnPortugueseBrazil') }
 ]))
 
 function setSaveHint(key, params = {}) {
@@ -101,7 +103,8 @@ function resetUploadedLanguages() {
   uploadedLanguages.value = {
     en: false,
     ar: false,
-    tr: false
+    tr: false,
+    'pt-BR': false
   }
 }
 
@@ -119,7 +122,8 @@ function buildRowsPayload() {
     key: item.key || '',
     en: item.en || '',
     ar: item.ar || '',
-    tr: item.tr || ''
+    tr: item.tr || '',
+    'pt-BR': item['pt-BR'] || ''
   }))
 }
 
@@ -159,7 +163,7 @@ async function fetchEditorTable() {
 
     const data = await response.json()
     relativePath.value = data.relative_path || ''
-    uploadedLanguages.value = data.uploaded_languages || { en: false, ar: false, tr: false }
+    uploadedLanguages.value = data.uploaded_languages || { en: false, ar: false, tr: false, 'pt-BR': false }
     const newKeys = Array.isArray(data.new_keys)
       ? data.new_keys.filter((item) => typeof item === 'string' && item.trim())
       : []
@@ -167,15 +171,17 @@ async function fetchEditorTable() {
 
     const parsedRows = Array.isArray(data.rows) ? data.rows : []
     const normalizedRows = parsedRows.map((item) => ({
+      usage_context: item.usage_context || '',
       key: item.key || '',
       en: item.en || '',
       ar: item.ar || '',
-      tr: item.tr || ''
+      tr: item.tr || '',
+      'pt-BR': item['pt-BR'] || ''
     }))
 
     rows.value = normalizedRows.length
       ? decorateRowsForDisplay(normalizedRows, newKeySet)
-      : [{ key: '', en: '', ar: '', tr: '', isNew: false }]
+      : [{ key: '', en: '', ar: '', tr: '', 'pt-BR': '', usage_context: '', isNew: false }]
     lastSavedSignature.value = buildRowsSignature(buildRowsPayload())
 
     if (relativePath.value && hasAnyUploaded.value) {
@@ -186,7 +192,7 @@ async function fetchEditorTable() {
   } catch (error) {
     relativePath.value = ''
     resetUploadedLanguages()
-    rows.value = [{ key: '', en: '', ar: '', tr: '', isNew: false }]
+    rows.value = [{ key: '', en: '', ar: '', tr: '', 'pt-BR': '', usage_context: '', isNew: false }]
     lastSavedSignature.value = ''
     setSaveHint('editor.hintUnavailable')
     showToast(error.message || t('editor.toastLoadFailed'), 'error')
@@ -196,13 +202,13 @@ async function fetchEditorTable() {
 }
 
 function addRow() {
-  rows.value.unshift({ key: '', en: '', ar: '', tr: '', isNew: true })
+  rows.value.unshift({ key: '', en: '', ar: '', tr: '', 'pt-BR': '', usage_context: '', isNew: true })
   triggerAutoSave()
 }
 
 function removeRow(index) {
   if (rows.value.length === 1) {
-    rows.value[0] = { key: '', en: '', ar: '', tr: '', isNew: false }
+    rows.value[0] = { key: '', en: '', ar: '', tr: '', 'pt-BR': '', usage_context: '', isNew: false }
   } else {
     rows.value.splice(index, 1)
   }
@@ -379,9 +385,7 @@ onMounted(() => {
 
       <div class="kv-head">
         <span>{{ t('editor.columnKey') }}</span>
-        <span>{{ t('editor.columnEnglish') }}</span>
-        <span>{{ t('editor.columnArabic') }}</span>
-        <span>{{ t('editor.columnTurkish') }}</span>
+        <span v-for="column in languageColumns" :key="column.code">{{ column.label }}</span>
         <span>{{ t('editor.columnActions') }}</span>
       </div>
 
@@ -397,33 +401,23 @@ onMounted(() => {
               @blur="triggerAutoSave"
             />
           </div>
-          <textarea
-            v-model="item.en"
-            :disabled="!uploadedLanguages.en"
-            class="field value-field"
-            rows="2"
-            :placeholder="getValuePlaceholder('en')"
-            @input="markEditing"
-            @blur="triggerAutoSave"
-          ></textarea>
-          <textarea
-            v-model="item.ar"
-            :disabled="!uploadedLanguages.ar"
-            class="field value-field"
-            rows="2"
-            :placeholder="getValuePlaceholder('ar')"
-            @input="markEditing"
-            @blur="triggerAutoSave"
-          ></textarea>
-          <textarea
-            v-model="item.tr"
-            :disabled="!uploadedLanguages.tr"
-            class="field value-field"
-            rows="2"
-            :placeholder="getValuePlaceholder('tr')"
-            @input="markEditing"
-            @blur="triggerAutoSave"
-          ></textarea>
+          <div v-for="column in languageColumns" :key="column.code" class="translation-cell">
+            <label class="language-label" :for="`translation-${sourceIndex}-${column.code}`">{{ column.label }}</label>
+            <textarea
+              :id="`translation-${sourceIndex}-${column.code}`"
+              v-model="item[column.code]"
+              :disabled="!uploadedLanguages[column.code]"
+              class="field value-field"
+              rows="2"
+              :placeholder="getValuePlaceholder(column.code)"
+              @input="markEditing"
+              @blur="triggerAutoSave"
+            ></textarea>
+            <div v-if="column.code === 'en'" class="usage-context">
+              <span class="usage-label">{{ t('editor.usageContext') }}</span>
+              <p>{{ item.usage_context || t('editor.noUsageContext') }}</p>
+            </div>
+          </div>
           <button class="remove-btn" @click="requestRemoveRow(sourceIndex)">
             <i class="fa-solid fa-trash"></i>
           </button>
@@ -625,9 +619,37 @@ onMounted(() => {
 .kv-row {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: minmax(280px, 24%) repeat(3, minmax(220px, 1fr)) 56px;
+  grid-template-columns: minmax(200px, 20%) repeat(4, minmax(0, 1fr)) 56px;
   gap: 8px;
   align-items: start;
+}
+
+.translation-cell {
+  min-width: 0;
+}
+
+.language-label {
+  display: none;
+}
+
+.usage-context {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #eef4f3;
+  color: #45606b;
+  font-size: 0.8rem;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.usage-label {
+  font-weight: 700;
+}
+
+.usage-context p {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
 }
 
 .kv-head {
@@ -681,6 +703,7 @@ onMounted(() => {
 }
 
 .value-field {
+  width: 100%;
   resize: vertical;
   line-height: 1.6;
   min-height: 74px;
@@ -802,8 +825,15 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .kv-head span:last-child {
+  .kv-head {
     display: none;
+  }
+
+  .language-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.85rem;
+    color: #55707a;
   }
 
   .remove-btn {

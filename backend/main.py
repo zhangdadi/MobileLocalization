@@ -25,21 +25,23 @@ from pydantic import BaseModel, Field
 import yaml
 
 PlatformType = Literal["ios", "android"]
-LanguageCode = Literal["en", "ar", "tr"]
+LanguageCode = Literal["en", "ar", "tr", "pt-BR"]
 
-LANGUAGES: tuple[LanguageCode, ...] = ("en", "ar", "tr")
-NON_ENGLISH_LANGUAGES: tuple[LanguageCode, ...] = ("ar", "tr")
+LANGUAGES: tuple[LanguageCode, ...] = ("en", "ar", "tr", "pt-BR")
+NON_ENGLISH_LANGUAGES: tuple[LanguageCode, ...] = ("ar", "tr", "pt-BR")
 
 LANGUAGE_DIR_MAP: dict[PlatformType, dict[LanguageCode, str]] = {
     "ios": {
         "en": "en.lproj",
         "ar": "ar.lproj",
         "tr": "tr.lproj",
+        "pt-BR": "pt-BR.lproj",
     },
     "android": {
         "en": "values",
         "ar": "values-ar",
         "tr": "values-tr",
+        "pt-BR": "values-pt-rBR",
     },
 }
 
@@ -85,6 +87,7 @@ class EditorRow(BaseModel):
     en: str = Field(default="")
     ar: str = Field(default="")
     tr: str = Field(default="")
+    pt_br: str = Field(default="", alias="pt-BR")
 
 
 class EditorSavePayload(BaseModel):
@@ -432,7 +435,7 @@ def choose_editor_relative_path(platform: PlatformType) -> str:
     return sorted(merged)[0]
 
 
-IOS_LINE_PATTERN = re.compile(r'^\s*"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"\s*;\s*$')
+IOS_LINE_PATTERN = re.compile(r'^\s*"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"\s*;\s*(?://(.*))?$')
 IOS_ESCAPE_PATTERN = re.compile(r'\\([nrt"\\])')
 IOS_UNESCAPE_MAP = {
     "n": "\n",
@@ -479,6 +482,18 @@ def parse_ios_strings(content: str) -> dict[str, str]:
         data[key] = value
 
     return data
+
+
+def parse_usage_contexts(platform: PlatformType, content: str) -> dict[str, str]:
+    """Read usage notes from English iOS entries without treating them as translations."""
+    if platform != "ios":
+        return {}
+    contexts: dict[str, str] = {}
+    for line in content.splitlines():
+        match = IOS_LINE_PATTERN.match(line.strip())
+        if match:
+            contexts[unescape_ios_value(match.group(1))] = (match.group(3) or "").strip()
+    return contexts
 
 
 def parse_android_xml(content: str) -> dict[str, str]:
@@ -567,7 +582,11 @@ def serialize_ios_rows(rows: list[dict[str, str]], language: LanguageCode) -> st
         if not key:
             continue
         value = row.get(language, "")
-        lines.append(f'"{escape_ios_value(key)}" = "{escape_ios_value(value)}";')
+        entry = f'"{escape_ios_value(key)}" = "{escape_ios_value(value)}";'
+        context = row.get("usage_context", "") if language == "en" else ""
+        if context:
+            entry += f" //{context}"
+        lines.append(entry)
 
     if not lines:
         return ""
@@ -605,6 +624,7 @@ def append_entries_to_existing_file(
     platform: PlatformType,
     target_file: Path,
     entries: dict[str, str],
+    usage_contexts: dict[str, str] | None = None,
 ) -> int:
     if not entries:
         return 0
@@ -612,6 +632,7 @@ def append_entries_to_existing_file(
     if platform == "ios":
         lines = [
             f'"{escape_ios_value(key)}" = "{escape_ios_value(value)}";'
+            + (f" //{usage_contexts[key]}" if usage_contexts and usage_contexts.get(key) else "")
             for key, value in entries.items()
         ]
         original = read_text_safe(target_file)
@@ -682,7 +703,15 @@ def write_rows_to_existing_files(
 
         root = get_language_root(platform, language)
         target_file = safe_join(root, resolved_path)
-        content = serialize_translation_rows(platform, rows, language)
+        # Usage notes are read-only metadata. Never accept replacements from the client.
+        serialization_rows = rows
+        if language == "en":
+            contexts = parse_usage_contexts(platform, read_text_safe(target_file))
+            serialization_rows = [
+                {**row, "usage_context": contexts.get(row["key"], "")}
+                for row in rows
+            ]
+        content = serialize_translation_rows(platform, serialization_rows, language)
         target_file.write_text(content, encoding="utf-8")
         saved_languages.append(language)
 
@@ -792,7 +821,8 @@ def sync_non_english_to_other_platform(
 
 def build_editor_rows(platform: PlatformType, relative_path: str) -> tuple[list[dict[str, str]], dict[LanguageCode, bool]]:
     merged: dict[str, dict[str, str]] = {}
-    uploaded: dict[LanguageCode, bool] = {"en": False, "ar": False, "tr": False}
+    uploaded: dict[LanguageCode, bool] = {language: False for language in LANGUAGES}
+    contexts: dict[str, str] = {}
 
     for language in LANGUAGES:
         resolved_path = resolve_language_relative_path(platform, language, relative_path)
@@ -804,6 +834,8 @@ def build_editor_rows(platform: PlatformType, relative_path: str) -> tuple[list[
 
         uploaded[language] = True
         content = read_text_safe(target_file)
+        if language == "en":
+            contexts = parse_usage_contexts(platform, content)
         try:
             values = parse_translation_content(platform, content)
         except ValueError as exc:
@@ -816,13 +848,13 @@ def build_editor_rows(platform: PlatformType, relative_path: str) -> tuple[list[
             if key not in merged:
                 merged[key] = {
                     "key": key,
-                    "en": "",
-                    "ar": "",
-                    "tr": "",
+                    **{code: "" for code in LANGUAGES},
                 }
             merged[key][language] = value
 
     rows = list(merged.values())
+    for row in rows:
+        row["usage_context"] = contexts.get(row["key"], "")
     return rows, uploaded
 
 
@@ -840,6 +872,7 @@ def normalize_editor_rows(rows: list[EditorRow]) -> list[dict[str, str]]:
             "en": row.en,
             "ar": row.ar,
             "tr": row.tr,
+            "pt-BR": row.pt_br,
         }
 
         if key in index_map:
@@ -1035,7 +1068,13 @@ def append_file_content(payload: AppendPayload) -> dict[str, str | int | list[st
         raise HTTPException(status_code=404, detail="File not found")
 
     # Pure append: no key/value comparison, no replacement.
-    appended_count = append_entries_to_existing_file(payload.platform, source_file, appended_values)
+    usage_contexts = (
+        parse_usage_contexts(payload.platform, payload.content)
+        if payload.language == "en" else None
+    )
+    appended_count = append_entries_to_existing_file(
+        payload.platform, source_file, appended_values, usage_contexts=usage_contexts,
+    )
     saved_languages: list[str] = [payload.language]
     skipped_languages: list[str] = []
     same_platform_synced: list[str] = []
@@ -1089,11 +1128,7 @@ def get_editor_table(
         return {
             "relative_path": "",
             "rows": [],
-            "uploaded_languages": {
-                "en": False,
-                "ar": False,
-                "tr": False,
-            },
+            "uploaded_languages": {language: False for language in LANGUAGES},
             "new_keys": [],
         }
 

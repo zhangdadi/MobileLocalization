@@ -7,9 +7,10 @@
 - 登录鉴权（JWT + Cookie + Bearer Token）
 - 上传语言文件（iOS `.strings` / Android `.xml`）
 - 按平台和语言浏览、下载已上传文件
-- 三语编辑表格（`en` / `ar` / `tr`）
+- 四语编辑表格（`en` / `ar` / `tr` / `pt-BR`）
+- 英文 iOS 条目行尾 `//` 使用场景注释以只读方式展示，表格保存后保留
 - 输入框失焦自动保存
-- 非英文翻译跨平台自动同步（英文值一致时同步 `ar`、`tr`）
+- 非英文翻译跨平台自动同步（英文值一致时同步 `ar`、`tr`、`pt-BR`）
 
 ## 技术栈
 
@@ -163,9 +164,11 @@ auth:
 | iOS | en | `backend/storage/ios/en.lproj` |
 | iOS | ar | `backend/storage/ios/ar.lproj` |
 | iOS | tr | `backend/storage/ios/tr.lproj` |
+| iOS | pt-BR | `backend/storage/ios/pt-BR.lproj` |
 | Android | en | `backend/storage/android/values` |
 | Android | ar | `backend/storage/android/values-ar` |
 | Android | tr | `backend/storage/android/values-tr` |
+| Android | pt-BR | `backend/storage/android/values-pt-rBR` |
 
 ## API 概览
 
@@ -178,7 +181,7 @@ auth:
 - `POST /api/upload`：上传文件（同平台同语言会覆盖）
 - `GET /api/file-content`：读取文件文本
 - `POST /api/file-content`：保存文件文本
-- `GET /api/editor-table`：获取三语编辑数据
+- `GET /api/editor-table`：获取四语编辑数据
 - `POST /api/editor-table`：保存编辑数据并触发跨平台同步
 
 ## 前端与后端联调说明
@@ -191,7 +194,17 @@ auth:
 
 - 上传接口会先清理该平台该语言下的现有同类型文件，再写入新文件。
 - 编辑器自动保存只在“失焦且内容变化”时触发。
-- 跨平台同步逻辑只同步 `ar`、`tr`，并且要求两端英文值一致。
+- 跨平台同步逻辑只同步 `ar`、`tr`、`pt-BR`，并且要求两端英文值一致。
+
+## 测试
+
+安装 `backend/requirements-dev.txt` 中的依赖后，在项目根目录运行：
+
+```bash
+python -m unittest discover -s backend/tests -v
+```
+
+覆盖巴西葡萄牙语上传、双向同步、使用场景只读及保存保留行为。
 
 ## License
 

@@ -3,5 +3,5 @@ auth:
   jwt_exp_minutes: 720
   users:
     - username: "admin"
-      password: "123456"
+      password: "nafass1234"
       enabled: true

@@ -22,7 +22,7 @@ const messages = {
       brandTag: 'Mobile Localization Collaboration',
       title: 'Translation Workspace',
       navUpload: 'File Upload',
-      navEditor: 'Trilingual Key Editor',
+      navEditor: 'Multilingual Key Editor',
       logout: 'Logout'
     },
     login: {
@@ -42,7 +42,7 @@ const messages = {
     upload: {
       sourceTitle: 'Source File Upload',
       uploadedTitle: 'Uploaded Files',
-      supportedTip: 'Supported languages: English, Arabic, Turkish. Each upload replaces the existing file under the same platform and language, even with a different filename.',
+      supportedTip: 'Supported languages: English, Arabic, Turkish, Brazilian Portuguese. Each upload replaces the existing file under the same platform and language, even with a different filename.',
       dragHint: 'Drag files here, or click the button to select',
       dragHelp: 'iOS supports only .strings, android supports only .xml',
       selectFiles: 'Select Files',
@@ -72,6 +72,7 @@ const messages = {
       languageEnglish: 'English',
       languageArabic: 'Arabic',
       languageTurkish: 'Turkish',
+      languagePortugueseBrazil: 'Portuguese (Brazil)',
       toastSelectFile: 'Please select files first',
       toastLoadFileListFailed: 'Failed to load file list',
       toastInvalidFileType: '{name} has an invalid file type: {tip}',
@@ -90,10 +91,10 @@ const messages = {
       toastCopyFailed: 'Copy failed'
     },
     editor: {
-      title: 'Trilingual Key Editor',
+      title: 'Multilingual Key Editor',
       uploaded: 'Uploaded',
       notUploaded: 'Not uploaded',
-      featureNote: 'Auto-save rule: data is saved only when a field loses focus and content has changed. Non-English edits (Arabic/Turkish) are auto-synced to the other platform when the English value matches.',
+      featureNote: 'Auto-save rule: data is saved only when a field loses focus and content has changed. Non-English edits (Arabic/Turkish/Brazilian Portuguese) are auto-synced to the other platform when the English value matches.',
       loading: 'Loading editor data...',
       noEditableFile: 'No editable file exists on this platform yet. Please upload at least one source file on the "File Upload" page first.',
       searchByKey: 'Search by key',
@@ -104,6 +105,9 @@ const messages = {
       columnEnglish: 'English',
       columnArabic: 'Arabic',
       columnTurkish: 'Turkish',
+      columnPortugueseBrazil: 'Portuguese (Brazil)',
+      usageContext: 'Usage context (read-only)',
+      noUsageContext: 'No usage context provided',
       columnActions: 'Actions',
       keyExample: 'e.g. check_my_decoration',
       newTag: 'NEW',
@@ -138,7 +142,7 @@ const messages = {
       brandTag: '移动端本地化协作',
       title: '翻译工作台',
       navUpload: '文件上传',
-      navEditor: '三语键值编辑',
+      navEditor: '多语言键值编辑',
       logout: '退出登录'
     },
     login: {
@@ -158,7 +162,7 @@ const messages = {
     upload: {
       sourceTitle: '源文件上传',
       uploadedTitle: '已上传文件',
-      supportedTip: '支持语言：英语、阿拉伯语、土耳其语。相同平台和语种下，上传会覆盖已有文件，即使文件名不同。',
+      supportedTip: '支持语言：英语、阿拉伯语、土耳其语、巴西葡萄牙语。相同平台和语种下，上传会覆盖已有文件，即使文件名不同。',
       dragHint: '将文件拖到这里，或点击按钮选择文件',
       dragHelp: 'iOS 仅支持 .strings，android 仅支持 .xml',
       selectFiles: '选择文件',
@@ -188,6 +192,7 @@ const messages = {
       languageEnglish: '英语',
       languageArabic: '阿拉伯语',
       languageTurkish: '土耳其语',
+      languagePortugueseBrazil: '葡萄牙语（巴西）',
       toastSelectFile: '请先选择文件',
       toastLoadFileListFailed: '加载文件列表失败',
       toastInvalidFileType: '{name} 文件类型不正确：{tip}',
@@ -206,10 +211,10 @@ const messages = {
       toastCopyFailed: '复制失败'
     },
     editor: {
-      title: '三语键值编辑器',
+      title: '多语言键值编辑器',
       uploaded: '已上传',
       notUploaded: '未上传',
-      featureNote: '自动保存规则：仅在输入框失焦且内容有变化时保存。非英文改动（阿语/土耳其语）会在英文值一致时自动同步到另一端。',
+      featureNote: '自动保存规则：仅在输入框失焦且内容有变化时保存。非英文改动（阿语/土耳其语/巴西葡萄牙语）会在英文值一致时自动同步到另一端。',
       loading: '正在加载编辑数据...',
       noEditableFile: '该平台还没有可编辑文件，请先到“文件上传”页面至少上传一个源文件。',
       searchByKey: '按 key 搜索',
@@ -220,6 +225,9 @@ const messages = {
       columnEnglish: '英文',
       columnArabic: '阿语',
       columnTurkish: '土耳其语',
+      columnPortugueseBrazil: '葡萄牙语（巴西）',
+      usageContext: '使用场景（只读）',
+      noUsageContext: '暂无使用场景说明',
       columnActions: '操作',
       keyExample: '例如 check_my_decoration',
       newTag: 'NEW',
